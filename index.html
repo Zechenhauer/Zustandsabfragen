@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Status</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        /* --- Design-Variablen (Basis aus der PV-App) --- */
+        :root {
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            
+            /* Statusfarben */
+            --color-open: #e74c3c;      /* Soft-Rot bei offen */
+            --color-closed: #2ecc71;    /* Soft-Grün bei geschlossen */
+            --color-loading: #95a5a6;   /* Grau bei Laden/Fehler */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* --- Listen-Container --- */
+        .sensor-list-container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* --- Sensor Karte (Item) --- */
+        .sensor-item {
+            display: flex;
+            align-items: center;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .sensor-item:active {
+            transform: scale(0.99);
+        }
+
+        /* --- Icon-Styling --- */
+        .sensor-icon {
+            font-size: 26px;
+            margin-right: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.3s ease;
+        }
+
+        /* --- Info-Bereich --- */
+        .sensor-info {
+            flex-grow: 1;
+        }
+
+        .sensor-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .sensor-location {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* --- Status-Badge --- */
+        .sensor-state {
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        /* --- Dynamische Zustände (Klassen-Steuerung) --- */
+
+        /* Zustand: OFFEN (on) */
+        .state-open .sensor-state {
+            background-color: rgba(231, 76, 60, 0.1);
+            color: var(--color-open);
+        }
+        .state-open .sensor-icon { color: var(--color-open); }
+
+        /* Zustand: ZU (off) */
+        .state-closed .sensor-state {
+            background-color: rgba(46, 204, 113, 0.1);
+            color: var(--color-closed);
+        }
+        .state-closed .sensor-icon { color: var(--color-closed); }
+
+        /* Zustand: LADEN / FEHLER */
+        .state-loading .sensor-state {
+            background-color: rgba(149, 165, 166, 0.1);
+            color: var(--color-loading);
+        }
+        .state-loading .sensor-icon { color: var(--color-loading); }
+    </style>
+</head>
+<body>
+
+    <div class="sensor-list-container">
+        
+        <div id="haustuer-sensor" class="sensor-item state-loading">
+            <div class="sensor-icon">
+                <span class="material-icons">door_front</span>
+            </div>
+            <div class="sensor-info">
+                <div class="sensor-name">Haustür</div>
+                <div class="sensor-location">Eingangsbereich</div>
+            </div>
+            <div class="sensor-state">Lade...</div>
+        </div>
+
+        </div>
+
+    <script>
+        // =================================================================
+        // --- KONFIGURATION ---
+        // =================================================================
+        const HA_URL = "https://DEINE-HOMEASSISTANT-URL.ui.nabu.casa"; // Deine HA-Adresse (z.B. Nabu Casa oder DuckDNS)
+        const HA_TOKEN = "DEIN_LANGZEIT_ACCESS_TOKEN_HIER_EINSETZEN"; // Dein generiertes Langlebiges Zugangstoken
+
+        // =================================================================
+        // --- API & LIVE-ABFRAGE ---
+        // =================================================================
+
+        /**
+         * Holt den aktuellen Zustand eines Sensors live aus Home Assistant
+         * @param {string} entityId - Die HA-Entity
+         * @param {string} elementId - Die HTML-ID der Karte
+         */
+        async function fetchSensorState(entityId, elementId) {
+            try {
+                const response = await fetch(`${HA_URL}/api/states/${entityId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${HA_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API-Fehler: Status ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Zustand an die UI-Funktion übergeben
+                updateSensorUI(elementId, data.state);
+
+            } catch (error) {
+                console.error(`Fehler beim Laden von ${entityId}:`, error);
+                
+                // Visuelles Feedback bei Verbindungsfehlern
+                const container = document.getElementById(elementId);
+                if (container) {
+                    container.className = 'sensor-item state-loading';
+                    container.querySelector('.sensor-state').textContent = 'Fehler';
+                }
+            }
+        }
+
+        /**
+         * Aktualisiert die visuelle Darstellung des Sensors in der Liste
+         * @param {string} elementId - Die HTML-ID des Elements
+         * @param {string} state - Der HA-Status ('on' oder 'off')
+         */
+        function updateSensorUI(elementId, state) {
+            const container = document.getElementById(elementId);
+            if (!container) return;
+            
+            const stateLabel = container.querySelector('.sensor-state');
+            
+            // Vorherige Zustandsklassen entfernen
+            container.classList.remove('state-loading', 'state-open', 'state-closed');
+            
+            if (state === 'on') {
+                container.classList.add('state-open');
+                stateLabel.textContent = 'Offen';
+            } else if (state === 'off') {
+                container.classList.add('state-closed');
+                stateLabel.textContent = 'Zu';
+            } else {
+                container.classList.add('state-loading');
+                stateLabel.textContent = state || 'Unbekannt';
+            }
+        }
+
+        // =================================================================
+        // --- INITIALER START & REFRESH-SCHLEIFE ---
+        // =================================================================
+
+        // Funktion, die alle in der App registrierten Sensoren aktualisiert
+        function updateAllSensors() {
+            fetchSensorState('binary_sensor.0x00158d008b1522bd_contact', 'haustuer-sensor');
+        }
+
+        // Sobald das Dokument bereit ist, die Abfrage starten
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAllSensors();
+            
+            // Automatisch alle 30 Sekunden im Hintergrund aktualisieren
+            setInterval(updateAllSensors, 30000);
+        });
+    </script>
+</body>
+</html>
