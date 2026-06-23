@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Status</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        /* --- Design-Variablen --- */
+        :root {
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            
+            /* Statusfarben */
+            --color-open: #e74c3c;      /* Soft-Rot bei offen / an / abwesend */
+            --color-closed: #2ecc71;    /* Soft-Grün bei geschlossen / aus / zuhause */
+            --color-loading: #95a5a6;   /* Grau bei Laden/Fehler */
+            
+            /* Rahmen/Überschrift-Farbe */
+            --title-border: #34495e;
+            --title-bg: #eaeded;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* --- Haupt-App-Container --- */
+        .app-container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* --- Überschrift Styling --- */
+        .app-title-container {
+            background-color: var(--title-bg);
+            border: 2px solid var(--title-border);
+            border-radius: 16px;
+            padding: 12px 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: -5px;
+        }
+
+        .app-title {
+            font-family: "Segoe UI", Georgia, Garamond, sans-serif;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--title-border);
+            margin: 0;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* --- Block / Kategorie Styling --- */
+        .category-block {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .category-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-left: 6px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* --- Sensor Liste --- */
+        .sensor-list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* --- Sensor Karte (Item) --- */
+        .sensor-item {
+            display: flex;
+            align-items: center;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 14px 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+            transition: transform 0.2s ease, background-color 0.2s ease;
+            border-left: 4px solid var(--color-loading);
+            position: relative;
+        }
+
+        /* Schaltbare Elemente bekommen einen Zeiger */
+        .clickable {
+            cursor: pointer;
+        }
+        .clickable:active {
+            transform: scale(0.98) !important;
+        }
+        
+        /* Zustand: OFFEN / AN / ABWESEND */
+        .state-open {
+            background-color: #fdf5f5;
+            border-left-color: var(--color-open);
+        }
+        .state-open .sensor-state {
+            background-color: rgba(231, 76, 60, 0.1);
+            color: var(--color-open);
+        }
+        .state-open .sensor-icon { color: var(--color-open); }
+
+        /* Zustand: ZU / AUS / ZUHAUSE */
+        .state-closed {
+            background-color: #f5fbf7;
+            border-left-color: var(--color-closed);
+        }
+        .state-closed .sensor-state {
+            background-color: rgba(46, 204, 113, 0.1);
+            color: var(--color-closed);
+        }
+        .state-closed .sensor-icon { color: var(--color-closed); }
+
+        /* Zustand: LADEN / FEHLER */
+        .state-loading {
+            background-color: var(--card-bg);
+            border-left-color: var(--color-loading);
+        }
+        .state-loading .sensor-state {
+            background-color: rgba(149, 165, 166, 0.1);
+            color: var(--color-loading);
+        }
+        .state-loading .sensor-icon { color: var(--color-loading); }
+
+        .sensor-icon {
+            font-size: 24px;
+            margin-right: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.3s ease;
+        }
+
+        .sensor-info {
+            flex-grow: 1;
+        }
+
+        .sensor-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .sensor-location {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Kleiner Indikator für interaktive Schalter */
+        .action-hint {
+            font-size: 9px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            text-align: right;
+            display: none;
+        }
+        .clickable .action-hint {
+            display: block;
+        }
+
+        .state-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .sensor-state {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            text-align: center;
+            min-width: 65px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <div class="app-title-container">
+            <h1 class="app-title">Zustandsabfrage</h1>
+        </div>
+        
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">security</span> Sicherheit & Präsenz</div>
+            <div class="sensor-list-container">
+                <div id="tracker-frau-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">favorite</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Schatzie</div>
+                        <div class="sensor-location">Status</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="haustuer-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">door_front</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Haustür</div>
+                        <div class="sensor-location">Eingangsbereich</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="garagentor-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.garagentor_schalter_1', 'garagentor-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">garage</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Garagentor</div>
+                        <div class="sensor-location">Garage</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">wb_sunny</span> Garten & Pool</div>
+            <div class="sensor-list-container">
+                <div id="poolpumpe-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.shelly1pmg3_3030f9eb6600_switch_0', 'poolpumpe-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">pool</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Pool-Pumpe</div>
+                        <div class="sensor-location">Garten</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="poollicht-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.pool_licht', 'poollicht-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">lightbulb</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Pool-Licht</div>
+                        <div class="sensor-location">Garten</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="gartenpumpe-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('input_boolean.gartenpumpe_an', 'gartenpumpe-sensor', 'input_boolean')">
+                    <div class="sensor-icon"><span class="material-icons">local_fire_department</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Gartenpumpe</div>
+                        <div class="sensor-location">Garten</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="flutlicht-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.flutlicht', 'flutlicht-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">flashlight_on</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Flutlicht</div>
+                        <div class="sensor-location">Garten</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="kugel-gross-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.terasse_gross', 'kugel-gross-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">brightness_1</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Kugel groß</div>
+                        <div class="sensor-location">Terrasse</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="kugel-mittel-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.terasse_mittel', 'kugel-mittel-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">panorama_fish_eye</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Kugel mittel</div>
+                        <div class="sensor-location">Terrasse</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">light</span> Wohnung & Beleuchtung</div>
+            <div class="sensor-list-container">
+                <div id="light-sofa-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.hue_lightstrip_plus_2', 'light-sofa-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">chair</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Sofa</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="light-wz-fenster-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.hue_lightstrip_plus_1', 'light-wz-fenster-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">blur_linear</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Fenster WZ</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="light-puppe-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.puppe', 'light-puppe-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">smart_toy</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Puppe</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="light-hue-go-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.hue_go', 'light-hue-go-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">brightness_4</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Hue Go</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="light-kueche-fenster-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('light.hue_lightstrip_plus_3', 'light-kueche-fenster-sensor', 'light')">
+                    <div class="sensor-icon"><span class="material-icons">blur_linear</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Küche Fenster</div>
+                        <div class="sensor-location">Küche</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">toggle_on</span> Flur & Treppenhaus</div>
+            <div class="sensor-list-container">
+                <div id="switch-eingang-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.eingang', 'switch-eingang-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">sensor_door</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Eingang Flur</div>
+                        <div class="sensor-location">Flur unten</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="switch-treppe-oben-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.treppe', 'switch-treppe-oben-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">stairs</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Treppe oben</div>
+                        <div class="sensor-location">Treppenhaus</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="switch-treppe-keller-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.treppe_keller', 'switch-treppe-keller-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">vertical_align_bottom</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Treppe Keller</div>
+                        <div class="sensor-location">Kellerbereich</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="switch-gaeste-wc-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.gaste', 'switch-gaeste-wc-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">wc</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Gäste WC</div>
+                        <div class="sensor-location">Licht</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">kitchen</span> Geräte & Küche</div>
+            <div class="sensor-list-container">
+                <div id="kuehlschrank-garage-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">door_sliding</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Kühlschranktür</div>
+                        <div class="sensor-location">Garage</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="kuehlschrank-garage-switch-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.shelly1pmminig3_5432045a2a44', 'kuehlschrank-garage-switch-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">power</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Kühlschrank Garage</div>
+                        <div class="sensor-location">Garage (Steckdose)</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="kuehlschrank-kueche-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.0xa4c1384766aef4f3', 'kuehlschrank-kueche-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">kitchen</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Kühlschrank</div>
+                        <div class="sensor-location">Küche</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="tv-sensor" class="sensor-item state-loading clickable" onclick="toggleEntity('switch.0xa4c13865819553ab', 'tv-sensor', 'switch')">
+                    <div class="sensor-icon"><span class="material-icons">tv</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Fernseher</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="action-hint">Schalten</div>
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="category-block">
+            <div class="category-title"><span class="material-icons" style="font-size:16px;">window</span> Fenster & Rollos</div>
+            <div class="sensor-list-container">
+                <div id="fenster-kueche-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">window</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Fenster</div>
+                        <div class="sensor-location">Küche</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="fenster-wc-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">window</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Fenster</div>
+                        <div class="sensor-location">Gäste WC</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="fenster-esszimmer-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">window</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Fenster</div>
+                        <div class="sensor-location">Esszimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="rollo-wohnzimmer-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">blinds</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Rollo</div>
+                        <div class="sensor-location">Wohnzimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="rollo-kueche-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">blinds</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Rollo</div>
+                        <div class="sensor-location">Küche</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="rollo-esszimmer-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">blinds</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Rollo</div>
+                        <div class="sensor-location">Esszimmer</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+
+                <div id="rollo-wc-sensor" class="sensor-item state-loading">
+                    <div class="sensor-icon"><span class="material-icons">blinds</span></div>
+                    <div class="sensor-info">
+                        <div class="sensor-name">Rollo</div>
+                        <div class="sensor-location">Gäste WC</div>
+                    </div>
+                    <div class="state-container">
+                        <div class="sensor-state">Lade...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // =================================================================
+        // --- KONFIGURATION ---
+        // =================================================================
+        const HA_URL = "https://1cbgsjyyusu6ydzrcy6uaqjcj5wrbyhw.ui.nabu.casa"; 
+        const HA_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI1MjI5MGRiNDVjZjA0ODU3YmE3MTk3MGFhNzg5YzZhZiIsImlhdCI6MTc4MjI0NDgxOCwiZXhwIjoyMDk3NjA0ODE4fQ.9qLVMXQO-uB6B8n2xAurbay3qJAy4Ahjtm0U9-ZXCrI"; 
+
+        // =================================================================
+        // --- API LIVE-ABFRAGE ---
+        // =================================================================
+
+        async function fetchSensorState(entityId, elementId, entityType) {
+            try {
+                const response = await fetch(`${HA_URL}/api/states/${entityId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${HA_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) throw new Error(`Status ${response.status}`);
+
+                const data = await response.json();
+                updateSensorUI(elementId, data, entityType);
+
+            } catch (error) {
+                console.error(`Fehler bei Entität [${entityId}]:`, error.message);
+                const container = document.getElementById(elementId);
+                if (container) {
+                    container.className = 'sensor-item state-loading';
+                    if (container.onclick) container.classList.add('clickable');
+                    container.querySelector('.sensor-state').textContent = 'Fehler';
+                }
+            }
+        }
+
+        // =================================================================
+        // --- SCHALT-FUNKTION (DYNAMISCHER SERVICE) ---
+        // =================================================================
+
+        async function toggleEntity(entityId, elementId, domain) {
+            const container = document.getElementById(elementId);
+            const stateLabel = container.querySelector('.sensor-state');
+            stateLabel.textContent = "...";
+            
+            const serviceDomain = domain === 'input_boolean' ? 'input_boolean' : (domain === 'light' ? 'light' : 'switch');
+            
+            try {
+                const response = await fetch(`${HA_URL}/api/services/${serviceDomain}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${HA_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ entity_id: entityId })
+                });
+                
+                if (response.ok) {
+                    setTimeout(() => { fetchSensorState(entityId, elementId, domain); }, 800);
+                }
+            } catch (error) {
+                console.error("Schaltfehler:", error);
+            }
+        }
+
+        // =================================================================
+        // --- UI-UPDATE LOGIK ---
+        // =================================================================
+
+        function updateSensorUI(elementId, data, entityType) {
+            const container = document.getElementById(elementId);
+            if (!container) return;
+            
+            const stateLabel = container.querySelector('.sensor-state');
+            const state = data.state;
+            
+            const isClickable = container.classList.contains('clickable');
+            container.className = 'sensor-item';
+            if (isClickable) container.classList.add('clickable');
+            
+            // 1. Device Tracker
+            if (entityType === 'tracker') {
+                if (state === 'home') {
+                    container.classList.add('state-closed'); 
+                    stateLabel.textContent = 'Zuhause';
+                } else if (state === 'not_home') {
+                    container.classList.add('state-open');   
+                    stateLabel.textContent = 'Abwesend';
+                } else {
+                    container.classList.add('state-loading');
+                    stateLabel.textContent = state;
+                }
+            } 
+            // 2. Rollos (Cover)
+            else if (entityType === 'cover') {
+                let position = null;
+                if (data.attributes) {
+                    position = data.attributes.current_position !== undefined ? data.attributes.current_position : data.attributes.position;
+                }
+
+                if (position !== null && !isNaN(position) && position !== '') {
+                    const posNum = parseInt(position, 10);
+                    if (posNum === 0) {
+                        container.classList.add('state-closed'); 
+                        stateLabel.textContent = 'Geschlossen';
+                    } else if (posNum === 100) {
+                        container.classList.add('state-open');   
+                        stateLabel.textContent = 'Geöffnet';
+                    } else {
+                        container.classList.add('state-open');   
+                        stateLabel.textContent = `${posNum}%`;
+                    }
+                } else {
+                    if (state === 'closed' || state === 'off') {
+                        container.classList.add('state-closed');
+                        stateLabel.textContent = 'Geschlossen';
+                    } else {
+                        container.classList.add('state-open');
+                        stateLabel.textContent = 'Geöffnet';
+                    }
+                }
+            } 
+            // 3. Standard für Sensoren, Lampen & Schalter
+            else {
+                if (state === 'on') {
+                    container.classList.add('state-open');
+                    
+                    // Wenn Helligkeit (brightness) aktiv ist -> Prozent anzeigen
+                    if (data.attributes && data.attributes.brightness !== undefined && data.attributes.brightness !== null) {
+                        const pct = Math.round((data.attributes.brightness / 255) * 100);
+                        stateLabel.textContent = `${pct}%`;
+                    } 
+                    // Spezifische Text-Überschreibungen für Türen/Fenster/Garagentor
+                    else if (elementId === 'garagentor-sensor') {
+                        stateLabel.textContent = 'Geöffnet';
+                    } else if (elementId.includes('tuer') || elementId.includes('fenster') || elementId.includes('garage-sensor')) {
+                        stateLabel.textContent = 'Offen';
+                    } else {
+                        stateLabel.textContent = 'An';
+                    }
+                } else if (state === 'off') {
+                    container.classList.add('state-closed');
+                    
+                    if (elementId === 'garagentor-sensor') {
+                        stateLabel.textContent = 'Geschlossen';
+                    } else if (elementId.includes('tuer') || elementId.includes('fenster') || elementId.includes('garage-sensor')) {
+                        stateLabel.textContent = 'Zu';
+                    } else {
+                        stateLabel.textContent = 'Aus';
+                    }
+                } else {
+                    container.classList.add('state-loading');
+                    stateLabel.textContent = state || 'Unbekannt';
+                }
+            }
+        }
+
+        // =================================================================
+        // --- REFRESH-SCHLEIFE ---
+        // =================================================================
+
+        function updateAllSensors() {
+            // Präsenz, Haustür & Garagentor
+            fetchSensorState('device_tracker.galaxy_a52s_5g', 'tracker-frau-sensor', 'tracker');
+            fetchSensorState('binary_sensor.0x00158d008b1522bd_contact', 'haustuer-sensor', 'binary');
+            fetchSensorState('switch.garagentor_schalter_1', 'garagentor-sensor', 'switch');
+            
+            // Garten & Pool
+            fetchSensorState('switch.shelly1pmg3_3030f9eb6600_switch_0', 'poolpumpe-sensor', 'switch');
+            fetchSensorState('switch.pool_licht', 'poollicht-sensor', 'switch');
+            fetchSensorState('input_boolean.gartenpumpe_an', 'gartenpumpe-sensor', 'input_boolean');
+            fetchSensorState('switch.flutlicht', 'flutlicht-sensor', 'switch');
+            fetchSensorState('light.terasse_gross', 'kugel-gross-sensor', 'light');
+            fetchSensorState('light.terasse_mittel', 'kugel-mittel-sensor', 'light');
+            
+            // Wohnung & Licht (Dimmbar)
+            fetchSensorState('light.hue_lightstrip_plus_2', 'light-sofa-sensor', 'light');
+            fetchSensorState('light.hue_lightstrip_plus_1', 'light-wz-fenster-sensor', 'light');
+            fetchSensorState('light.puppe', 'light-puppe-sensor', 'light');
+            fetchSensorState('light.hue_go', 'light-hue-go-sensor', 'light');
+            fetchSensorState('light.hue_lightstrip_plus_3', 'light-kueche-fenster-sensor', 'light');
+            
+            // Flur & Treppe (An/Aus Schalter)
+            fetchSensorState('switch.eingang', 'switch-eingang-sensor', 'switch');
+            fetchSensorState('switch.treppe', 'switch-treppe-oben-sensor', 'switch');
+            fetchSensorState('switch.treppe_keller', 'switch-treppe-keller-sensor', 'switch');
+            fetchSensorState('switch.gaste', 'switch-gaeste-wc-sensor', 'switch');
+            
+            // Geräte
+            fetchSensorState('binary_sensor.0x00158d008b31925d_contact', 'kuehlschrank-garage-sensor', 'binary');
+            fetchSensorState('switch.shelly1pmminig3_5432045a2a44', 'kuehlschrank-garage-switch-sensor', 'switch');
+            fetchSensorState('switch.0xa4c1384766aef4f3', 'kuehlschrank-kueche-sensor', 'switch');
+            fetchSensorState('switch.0xa4c13865819553ab', 'tv-sensor', 'switch');
+            
+            // Fenster
+            fetchSensorState('binary_sensor.fenster_1', 'fenster-kueche-sensor', 'binary');
+            fetchSensorState('binary_sensor.fenster_3', 'fenster-wc-sensor', 'binary');
+            fetchSensorState('binary_sensor.fenster', 'fenster-esszimmer-sensor', 'binary');
+            
+            // Rollos
+            fetchSensorState('cover.wohnzimmer', 'rollo-wohnzimmer-sensor', 'cover');
+            fetchSensorState('cover.kuche_rollo', 'rollo-kueche-sensor', 'cover');
+            fetchSensorState('cover.rollos', 'rollo-esszimmer-sensor', 'cover');
+            fetchSensorState('cover.rollladensteuerung', 'rollo-wc-sensor', 'cover');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAllSensors();
+            setInterval(updateAllSensors, 30000); 
+        });
+    </script>
+</body>
+</html>
